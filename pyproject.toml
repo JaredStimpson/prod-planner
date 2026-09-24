@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "production-planner"
+version = "0.1.0"
+description = "Portable recipe database, BOM calculator, and finite-capacity production scheduler"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "openpyxl>=3.1,<4",
+  "pydantic>=2.9,<3",
+  "python-multipart>=0.0.12,<1",
+  "sqlalchemy>=2.0,<3",
+  "typer>=0.12,<1",
+  "uvicorn>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = ["httpx>=0.27,<1", "pytest>=8.3,<9"]
+
+[project.scripts]
+planner = "production_planner.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
