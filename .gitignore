@@ -6,4 +6,4 @@ work/*
 !work/.gitkeep
 outputs/*
 !outputs/.gitkeep
-
+userdata/

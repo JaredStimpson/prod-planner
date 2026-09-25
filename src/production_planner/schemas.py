@@ -25,6 +25,21 @@ class PlanRequest(BaseModel):
         return value
 
 
+class UserDataSessionRequest(BaseModel):
+    use_last: bool = False
+
+
+class UserDataSaveRequest(BaseModel):
+    station_counts: dict[str, int] = Field(default_factory=dict)
+
+    @field_validator("station_counts")
+    @classmethod
+    def positive_station_counts(cls, value: dict[str, int]) -> dict[str, int]:
+        if any(not key or count < 1 for key, count in value.items()):
+            raise ValueError("station counts require nonblank keys and values of at least 1")
+        return value
+
+
 class PlanDocument(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -42,4 +57,3 @@ class PlanDocument(BaseModel):
     overall_completion_seconds: int
     actual_input_cost: str | None
     warnings: list[str]
-

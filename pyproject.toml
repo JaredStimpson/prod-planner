@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "production-planner"
-version = "1.1.0"
+version = "1.2.0"
 description = "Portable recipe database, BOM calculator, and finite-capacity production scheduler"
 requires-python = ">=3.12"
 dependencies = [

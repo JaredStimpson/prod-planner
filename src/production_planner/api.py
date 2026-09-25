@@ -13,10 +13,11 @@ from . import __version__
 from .converter import convert_workbook
 from .engine import Catalog, Planner, load_plan
 from .errors import PlannerError
-from .schemas import PlanRequest
+from .schemas import PlanRequest, UserDataSaveRequest, UserDataSessionRequest
+from .userdata import UserDataStore
 
 
-def create_app(database: Path | None = None, plan: Path | None = None) -> FastAPI:
+def create_app(database: Path | None = None, plan: Path | None = None, userdata_dir: Path | None = None) -> FastAPI:
     if database is not None and plan is not None:
         raise ValueError("choose at most one startup mode: database or saved plan")
     app = FastAPI(title="Production Planner", version=__version__)
@@ -24,6 +25,7 @@ def create_app(database: Path | None = None, plan: Path | None = None) -> FastAP
         "catalog": Catalog(database) if database else None,
         "saved_plan": load_plan(plan) if plan else None,
         "loaded_directory": None,
+        "userdata": UserDataStore(userdata_dir),
     }
     static_dir = Path(__file__).with_name("static")
     app.mount("/assets", StaticFiles(directory=static_dir), name="assets")
@@ -94,6 +96,29 @@ def create_app(database: Path | None = None, plan: Path | None = None) -> FastAP
         if not saved_plan:
             raise HTTPException(404, "no saved plan was loaded")
         return saved_plan
+
+    @app.get("/v1/userdata/status")
+    def userdata_status():
+        return state["userdata"].status()
+
+    @app.post("/v1/userdata/session")
+    def userdata_session(request: UserDataSessionRequest):
+        return state["userdata"].start(request.use_last)
+
+    @app.post("/v1/userdata/save")
+    def userdata_save(request: UserDataSaveRequest):
+        catalog = state["catalog"]
+        catalog_identity = {} if not catalog else {
+            "database_name": catalog.metadata.get("database_name", catalog.database.stem),
+            "data_as_of": catalog.metadata.get("data_as_of"),
+        }
+        return state["userdata"].save(request.station_counts, catalog_identity)
+
+    @app.post("/v1/userdata/load")
+    async def userdata_load(file: UploadFile = File(...)):
+        if not file.filename or Path(file.filename).suffix.lower() != ".json":
+            raise HTTPException(422, "upload must be a userdata JSON file")
+        return state["userdata"].load(await file.read())
 
     @app.post("/v1/catalog/load")
     async def load_database(file: UploadFile = File(...)):

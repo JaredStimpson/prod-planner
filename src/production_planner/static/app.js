@@ -2,6 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 const svgNS = "http://www.w3.org/2000/svg";
 const state = {
   items: [], stations: [], profile: null, selected: new Map(), capacities: new Map(), plan: null,
+  userdata: { ready: false, fileName: null, saveTimer: null },
   graph: { nodes: new Map(), edges: [], scale: 1, tx: 30, ty: 30, dragging: null, panning: null },
 };
 
@@ -77,6 +78,7 @@ function renderStations() {
       const valid = Math.max(1, Number.parseInt(value, 10) || 1);
       input.value = valid;
       state.capacities.set(key, valid);
+      scheduleUserDataSave();
     };
     input.addEventListener("change", () => setValue(input.value));
     row.querySelectorAll("button").forEach(button => button.addEventListener("click", () => setValue(Number(input.value) + Number(button.dataset.delta))));
@@ -115,6 +117,66 @@ function renderSelected() {
     row.querySelector("input").addEventListener("change", event => { selected.quantity = Math.max(.01, Number(event.target.value) || 1); });
     row.querySelector(".remove").addEventListener("click", () => { state.selected.delete(row.dataset.item); renderSelected(); });
   });
+}
+
+function updateUserDataCard(status = "Saved automatically") {
+  const card = $("#userdata-card");
+  card.classList.toggle("saving", status === "Saving…");
+  card.innerHTML = `<span class="source-icon">UD</span><div><strong>${escapeHtml(state.userdata.fileName || "User data session")}</strong><small>${escapeHtml(status)}</small></div>`;
+}
+
+function applyUserData(payload) {
+  state.userdata.ready = true;
+  state.userdata.fileName = payload.file_name;
+  Object.entries(payload.station_counts || {}).forEach(([key, count]) => {
+    if (state.capacities.has(key)) state.capacities.set(key, Math.max(1, Number.parseInt(count, 10) || 1));
+  });
+  renderStations();
+  updateUserDataCard();
+}
+
+async function startUserData(useLast) {
+  const payload = await api("/v1/userdata/session", {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({use_last: useLast}),
+  }).then(response => response.json());
+  applyUserData(payload);
+}
+
+function promptForUserData(status) {
+  return new Promise(resolve => {
+    const modal = $("#userdata-modal");
+    $("#resume-file").textContent = `${status.last_file_name} · last updated ${new Date(status.last_updated_at).toLocaleString()}`;
+    modal.hidden = false;
+    $("#resume-userdata-button").onclick = () => { modal.hidden = true; resolve(true); };
+    $("#new-userdata-button").onclick = () => { modal.hidden = true; resolve(false); };
+  });
+}
+
+async function initializeUserData() {
+  const status = await api("/v1/userdata/status").then(response => response.json());
+  const useLast = status.has_last ? await promptForUserData(status) : false;
+  await startUserData(useLast);
+}
+
+function scheduleUserDataSave() {
+  if (!state.userdata.ready) return;
+  updateUserDataCard("Saving…");
+  clearTimeout(state.userdata.saveTimer);
+  state.userdata.saveTimer = setTimeout(saveUserData, 350);
+}
+
+async function saveUserData() {
+  try {
+    const payload = await api("/v1/userdata/save", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({station_counts: Object.fromEntries(state.capacities)}),
+    }).then(response => response.json());
+    state.userdata.fileName = payload.file_name;
+    updateUserDataCard();
+  } catch (error) {
+    updateUserDataCard("Could not save");
+    toast(error.message);
+  }
 }
 
 async function calculate() {
@@ -319,10 +381,12 @@ function bindEvents() {
   $("#load-db-button").addEventListener("click", () => $("#db-file").click());
   $("#load-json-button").addEventListener("click", () => $("#json-file").click());
   $("#convert-button").addEventListener("click", () => $("#xlsx-file").click());
+  $("#load-userdata-button").addEventListener("click", () => $("#userdata-file").click());
   $("#save-button").addEventListener("click", savePlan);
   $("#db-file").addEventListener("change", event => uploadDatabase(event.target.files[0]));
   $("#json-file").addEventListener("change", event => loadPlanFile(event.target.files[0]));
   $("#xlsx-file").addEventListener("change", event => convertWorkbook(event.target.files[0]));
+  $("#userdata-file").addEventListener("change", event => loadUserDataFile(event.target.files[0]));
   const graph = $("#graph");
   graph.addEventListener("selectstart", event => event.preventDefault());
   graph.addEventListener("pointerdown", event => {
@@ -363,8 +427,25 @@ function bindEvents() {
 async function uploadDatabase(file) {
   if (!file) return;
   const form = new FormData(); form.append("file", file);
-  try { await api("/v1/catalog/load", {method:"POST", body:form}); await loadCatalog(); setTab("outputs"); toast(`${file.name} loaded`); }
+  try {
+    await api("/v1/catalog/load", {method:"POST", body:form});
+    await loadCatalog();
+    await startUserData(false);
+    setTab("outputs");
+    toast(`${file.name} loaded with a new user data file`);
+  }
   catch (error) { toast(error.message); }
+}
+
+async function loadUserDataFile(file) {
+  if (!file) return;
+  const form = new FormData(); form.append("file", file);
+  try {
+    const payload = await api("/v1/userdata/load", {method:"POST", body:form}).then(response => response.json());
+    applyUserData(payload);
+    setTab("capacity");
+    toast(`${file.name} loaded`);
+  } catch (error) { toast(error.message); }
 }
 
 async function convertWorkbook(file) {
@@ -395,7 +476,7 @@ async function boot() {
   bindEvents(); renderSelected();
   try {
     const health = await api("/health").then(r => r.json());
-    if (health.mode === "database") { await loadCatalog(); setTab("outputs"); }
+    if (health.mode === "database") { await loadCatalog(); await initializeUserData(); setTab("outputs"); }
     else if (health.mode === "viewer") { renderPlan(await api("/v1/viewer/plan").then(r => r.json())); }
     else { $("#status-text").textContent = "Load a catalog"; }
   } catch (error) { $("#status-text").textContent = "Connection error"; toast(error.message); }

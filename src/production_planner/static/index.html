@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Production Planner</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=1.1.2">
+  <link rel="stylesheet" href="/assets/styles.css?v=1.2.0">
 </head>
 <body>
   <main class="workspace">
     <header class="topbar">
       <div>
-        <div class="eyebrow">PRODUCTION PLANNER <span>1.1</span></div>
+        <div class="eyebrow">PRODUCTION PLANNER <span>1.2</span></div>
         <h1 id="catalog-title">Plan the work. See the path.</h1>
       </div>
       <div class="top-actions">
@@ -63,14 +63,20 @@
         <button class="primary" id="load-db-button">Load database</button>
         <button id="load-json-button">Load plan JSON</button>
         <button id="convert-button">Convert Excel → DB</button>
+        <button id="load-userdata-button">Load user data</button>
         <button id="save-button" disabled>Save current plan</button>
       </div>
       <input type="file" id="db-file" accept=".sqlite,.sqlite3,.db" hidden>
       <input type="file" id="json-file" accept=".json,application/json" hidden>
       <input type="file" id="xlsx-file" accept=".xlsx" hidden>
+      <input type="file" id="userdata-file" accept=".json,application/json" hidden>
       <div class="source-card" id="source-card">
         <span class="source-icon">DB</span>
         <div><strong>No catalog loaded</strong><small>Load a planner SQLite database to begin.</small></div>
+      </div>
+      <div class="source-card userdata-card" id="userdata-card">
+        <span class="source-icon">UD</span>
+        <div><strong>User data not started</strong><small>Station-count changes will be saved automatically.</small></div>
       </div>
       <div class="analysis-note">
         <strong>Workbook mapping</strong>
@@ -106,6 +112,18 @@
   </aside>
 
   <div class="toast" id="toast" hidden></div>
-  <script src="/assets/app.js?v=1.1.3" defer></script>
+  <div class="modal-backdrop" id="userdata-modal" hidden>
+    <section class="resume-dialog" role="dialog" aria-modal="true" aria-labelledby="resume-title">
+      <p class="eyebrow">USER DATA</p>
+      <h2 id="resume-title">Resume your last setup?</h2>
+      <p id="resume-description">Your previous station counts are available. You can resume them or begin a new file; the previous file will be kept.</p>
+      <div class="resume-file" id="resume-file"></div>
+      <div class="dialog-actions">
+        <button id="new-userdata-button">Start new</button>
+        <button class="primary" id="resume-userdata-button">Use last setup</button>
+      </div>
+    </section>
+  </div>
+  <script src="/assets/app.js?v=1.2.0" defer></script>
 </body>
 </html>
