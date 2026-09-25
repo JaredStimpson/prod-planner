@@ -10,13 +10,15 @@ Interactive recipe planning for discrete production systems. It loads a portable
 .\scripts\launch.ps1
 ```
 
-Open `http://127.0.0.1:8000` for the planner GUI or `/docs` for API documentation. The GUI searches all 418 producible items in the bundled 423-item catalog, accepts station-count overrides, and renders draggable PERT-style stages with cursor zoom, pan, and a red critical path. To view a saved plan without its source database, run:
+The launch script opens the planner in a contained desktop window. Pass `-Browser` to run the earlier browser/API mode at `http://127.0.0.1:8000`; its API documentation remains at `/docs`. The GUI searches all 418 producible items in the bundled 423-item catalog, accepts station-count overrides, and renders draggable PERT-style stages with cursor zoom, pan, and a red critical path. To view a saved plan in the desktop window, run:
 
 Station-count customizations save automatically into JSON files under the ignored `userdata/` directory. On startup, choose whether to resume the last file or begin a separate session. Older files are retained and can be loaded from the Data tab.
 
 ```powershell
 .\scripts\launch.ps1 -Plan .\work\example-plan.json
 ```
+
+See `docs/desktop-packaging.md` for packaged-binary resources, WebView2, and persistent per-user storage.
 
 ## Build a database
 

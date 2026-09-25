@@ -31,5 +31,8 @@ A planning request contains `outputs` (`item_key`, positive `quantity`, positive
 - `planner plan create`
 - `planner plan inspect`
 - `planner serve`, `planner serve --database ...`, or `planner serve --plan ...`
+- `planner desktop`, `planner desktop --database ...`, or `planner desktop --plan ...`
+
+`scripts/launch.ps1` uses desktop mode by default. `scripts/launch.ps1 -Browser` retains browser/API mode. Desktop mode starts the API on an ephemeral loopback port and owns its lifetime with the native app window.
 
 Plan JSON uses major/minor `schema_version`. Readers accept compatible major versions and ignore additional fields. The document contains all names, values, BOM rows, capacities, jobs, schedule results, source fingerprint, and warnings needed for database-independent display.

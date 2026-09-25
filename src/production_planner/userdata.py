@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,14 @@ def default_userdata_directory() -> Path:
     configured = os.getenv("PLANNER_USERDATA_DIR")
     if configured:
         return Path(configured)
+    if getattr(sys, "frozen", False):
+        if os.name == "nt":
+            root = Path(os.getenv("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+            return root / "ProductionPlanner" / "userdata"
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Application Support" / "ProductionPlanner" / "userdata"
+        root = Path(os.getenv("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+        return root / "production-planner" / "userdata"
     return Path(__file__).resolve().parents[2] / "userdata"
 
 

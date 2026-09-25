@@ -3,6 +3,7 @@ import json
 from fastapi.testclient import TestClient
 
 from production_planner.api import create_app
+from production_planner import userdata
 from production_planner.userdata import UserDataStore
 
 
@@ -46,3 +47,11 @@ def test_api_resumes_and_loads_userdata(catalog_path, tmp_path):
     assert response.status_code == 200
     assert response.json()["station_counts"] == {"bench": 7}
     assert response.json()["file_name"] != resumed["file_name"]
+
+
+def test_frozen_windows_userdata_uses_local_app_data(monkeypatch, tmp_path):
+    monkeypatch.setattr(userdata.sys, "frozen", True, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
+    monkeypatch.delenv("PLANNER_USERDATA_DIR", raising=False)
+
+    assert userdata.default_userdata_directory() == tmp_path / "LocalAppData" / "ProductionPlanner" / "userdata"

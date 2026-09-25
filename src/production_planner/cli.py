@@ -9,6 +9,7 @@ import typer
 from .api import create_app
 from .converter import convert_workbook, read_workbook
 from .database import validate_database
+from .desktop import run_desktop
 from .engine import Catalog, Planner, load_plan
 from .errors import PlannerError
 from .schemas import OutputRequest, PlanRequest
@@ -149,6 +150,21 @@ def serve(
         raise typer.BadParameter("choose at most one of --database or --plan")
     import uvicorn
     uvicorn.run(create_app(database, saved_plan), host=host, port=port)
+
+
+@app.command("desktop")
+def desktop(
+    database: Path | None = typer.Option(None, "--database", exists=True, dir_okay=False),
+    saved_plan: Path | None = typer.Option(None, "--plan", exists=True, dir_okay=False),
+    debug: bool = typer.Option(False, "--debug", help="Open the desktop web inspector."),
+):
+    """Run the planner in a contained desktop window."""
+    if database is not None and saved_plan is not None:
+        raise typer.BadParameter("choose at most one of --database or --plan")
+    try:
+        run_desktop(database=database, plan=saved_plan, debug=debug)
+    except PlannerError as exc:
+        _fail(exc)
 
 
 if __name__ == "__main__":
