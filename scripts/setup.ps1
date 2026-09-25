@@ -18,6 +18,6 @@ if (-not (Test-Path -LiteralPath $venv)) {
 $venvPython = Join-Path $venv "Scripts\python.exe"
 & $venvPython -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
-& $venvPython -m pip install -e "${root}[dev]"
+& $venvPython -m pip install -e "${root}[dev,desktop]"
 if ($LASTEXITCODE -ne 0) { throw "Project dependency installation failed." }
 Write-Host "Environment ready: $venv"

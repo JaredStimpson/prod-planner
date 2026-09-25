@@ -1,6 +1,7 @@
 param(
     [string]$Database,
     [string]$Plan,
+    [switch]$Browser,
     [int]$Port = 8000
 )
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,11 @@ if (-not (Test-Path -LiteralPath $planner)) {
 if ($Database -and $Plan) {
     throw "Provide at most one of -Database or -Plan."
 }
-if ($Database) { & $planner serve --database $Database --port $Port }
-elseif ($Plan) { & $planner serve --plan $Plan --port $Port }
-else { & $planner serve --database (Join-Path $root "sampledata\hay_day.sqlite") --port $Port }
+$catalog = if ($Database) { $Database } else { Join-Path $root "sampledata\hay_day.sqlite" }
+if ($Browser) {
+    if ($Plan) { & $planner serve --plan $Plan --port $Port }
+    else { & $planner serve --database $catalog --port $Port }
+} else {
+    if ($Plan) { & $planner desktop --plan $Plan }
+    else { & $planner desktop --database $catalog }
+}
