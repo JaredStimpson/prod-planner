@@ -25,7 +25,7 @@ Search this file first. It records where behavior lives, how components interact
 - Purpose: expose catalog search, planning, conversion, JSON export, database-independent plan viewing, and the interactive local GUI.
 - Code: `src/production_planner/api.py`, `src/production_planner/cli.py`, `src/production_planner/static/`.
 - Interfaces: documented in `docs/interfaces.md`; launch through `scripts/launch.ps1`.
-- Invariants: database and viewer modes are mutually exclusive, while empty GUI mode is allowed; viewer mode cannot search or compute; a locally uploaded database replaces only the in-memory active catalog; exported plans are self-contained; incompatible major plan versions are rejected; graph stages run left-to-right and critical jobs/edges are red.
+- Invariants: database and viewer modes are mutually exclusive, while empty GUI mode is allowed; viewer mode cannot search or compute; a locally uploaded database replaces only the in-memory active catalog; exported plans are self-contained; incompatible major plan versions are rejected; graph stages run left-to-right; identical item jobs within a stage share a counted node; distinct downstream relationships keep distinct edges; critical jobs/edges are red; `F` fits the graph unless focus is in an editable control.
 - Tests: `tests/test_interfaces.py`.
 
 ## Environment and samples
@@ -38,3 +38,5 @@ Search this file first. It records where behavior lives, how components interact
 
 - 2026-09-24: Initialized backend v0.1 with workbook conversion, portable catalogs, pooled BOM/cost planning, deterministic scheduling, FastAPI/CLI access, saved-plan viewer, and Hay Day starter data.
 - 2026-09-24: Added v1.1 normalized-workbook import and full Hay Day catalog, extended metadata preservation, dynamic database loading, critical-path annotations, and the interactive staged dependency-graph GUI.
+- 2026-09-24: Increased the Outputs sidebar's requested-output typography for compact, readable result scanning.
+- 2026-09-24: Fixed graph text selection during pan, stacked duplicate same-stage items with counts and preserved branching edges, and added the `F` fit-view shortcut.

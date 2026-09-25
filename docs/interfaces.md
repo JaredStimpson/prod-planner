@@ -12,7 +12,7 @@
 - `POST /v1/tools/databases/convert` using multipart field `file`
 - `POST /v1/catalog/load` using multipart field `file`
 
-`GET /` serves the local planner GUI. It has Data, Capacity, and Outputs panels; database and saved-plan loading; workbook conversion; JSON saving; searchable outputs; per-station counts; and a draggable, pannable, cursor-zoomed dependency graph with stage bands and a red critical path. The app may start without a catalog so one can be loaded from the Data panel.
+`GET /` serves the local planner GUI. It has Data, Capacity, and Outputs panels; database and saved-plan loading; workbook conversion; JSON saving; searchable outputs; per-station counts; and a draggable, pannable, cursor-zoomed dependency graph with stage bands and a red critical path. Repeated jobs for the same item and stage are stacked into one counted node while distinct downstream relationships retain separate edges. Press `F` outside an input to fit the graph. The app may start without a catalog so one can be loaded from the Data panel.
 
 A planning request contains `outputs` (`item_key`, positive `quantity`, positive integer `priority`), `capacity_profile`, and optional positive `station_overrides`.
 

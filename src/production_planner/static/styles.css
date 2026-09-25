@@ -30,6 +30,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 24px;
 .icon-button:hover, .sidebar button:hover { border-color: #aeb8c0; }
 .canvas-shell { position: relative; min-height: 0; overflow: hidden; background-color: #f8faf9; background-image: radial-gradient(#cdd5d6 0.7px, transparent 0.7px); background-size: 18px 18px; }
 #graph { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#graph, #graph * { user-select: none; -webkit-user-select: none; }
 #graph.panning { cursor: grabbing; }
 .empty-state { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
 .empty-state .empty-mark { margin: 0 auto 14px; width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--teal-soft); color: var(--teal); font-size: 25px; }
@@ -94,6 +95,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .result-table { width: 100%; border-collapse: collapse; font-size: 10px; }
 .result-table td { padding: 6px 2px; border-bottom: 1px solid #edf0f2; }
 .result-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.requested-outputs h3 { font-size: 11px; line-height: 1.25; letter-spacing: .075em; }
+.requested-outputs .result-table { font-size: 12px; line-height: 1.35; }
+.requested-outputs .result-table td { padding: 7px 2px; }
+.requested-outputs .result-table td:first-child { font-weight: 650; }
 .warning { margin: 7px 0 0; color: #8d5e08; background: #fff6df; padding: 8px; border-radius: 6px; font-size: 10px; }
 .node-details { position: absolute; top: 16px; left: 16px; width: 230px; padding: 13px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.96); box-shadow: 0 8px 24px rgba(20,41,50,.12); font-size: 11px; }
 .node-details h3 { margin: 0 0 8px; font: 600 17px Georgia, serif; }

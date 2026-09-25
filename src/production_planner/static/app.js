@@ -158,7 +158,7 @@ function renderResults(plan) {
     .map(row => `<tr><td>${escapeHtml(row.station_name)}</td><td>${row.station_count} × · ${Math.round(Number(row.utilization) * 100)}%</td></tr>`).join("");
   element.innerHTML = `
     <div class="metric-grid"><div class="metric"><small>Completion</small><strong>${duration(plan.overall_completion_seconds)}</strong></div><div class="metric"><small>Input cost</small><strong>${escapeHtml(plan.actual_input_cost ?? "—")}</strong></div><div class="metric"><small>Jobs</small><strong>${plan.jobs.length}</strong></div><div class="metric"><small>Raw inputs</small><strong>${plan.bom.length}</strong></div></div>
-    <div class="result-section"><h3>Requested outputs</h3><table class="result-table">${outputs}</table></div>
+    <div class="result-section requested-outputs"><h3>Requested outputs</h3><table class="result-table">${outputs}</table></div>
     <div class="result-section"><h3>Raw materials${plan.bom.length > 12 ? " · first 12" : ""}</h3><table class="result-table">${materials || "<tr><td>None</td><td>—</td></tr>"}</table></div>
     <div class="result-section"><h3>Used stations</h3><table class="result-table">${stations}</table></div>
     ${(plan.warnings || []).map(warning => `<p class="warning">${escapeHtml(warning)}</p>`).join("")}`;
@@ -185,11 +185,43 @@ function renderGraph(plan) {
     return stage;
   };
   plan.bom.forEach(row => graph.nodes.set(`raw:${row.item_key}`, {id:`raw:${row.item_key}`, kind:"raw", stage:0, name:row.name, quantity:row.quantity, unit:row.unit, average_value:row.average_value, data:row}));
-  plan.jobs.forEach(job => graph.nodes.set(job.job_id, {id:job.job_id, kind:"job", stage:stageOf(job), name:job.item_name, critical:Boolean(job.is_critical), data:job}));
+  const groupByJob = new Map();
   plan.jobs.forEach(job => {
-    job.dependencies.forEach(source => graph.edges.push({source, target:job.job_id, critical:Boolean(job.is_critical && jobById.get(source)?.is_critical)}));
-    Object.keys(job.ingredients || {}).filter(key => rawKeys.has(key)).forEach(key => graph.edges.push({source:`raw:${key}`, target:job.job_id, critical:Boolean(job.is_critical)}));
+    const stage = stageOf(job);
+    const groupId = `group:${stage}:${job.item_key}`;
+    if (!graph.nodes.has(groupId)) {
+      graph.nodes.set(groupId, {id:groupId, kind:"job", stage, name:job.item_name, critical:false, jobs:[], data:job});
+    }
+    const node = graph.nodes.get(groupId);
+    node.jobs.push(job);
+    node.critical ||= Boolean(job.is_critical);
+    groupByJob.set(job.job_id, groupId);
   });
+  graph.nodes.forEach(node => {
+    if (node.kind !== "job") return;
+    node.count = node.jobs.length;
+    node.criticalCount = node.jobs.filter(job => job.is_critical).length;
+    node.startSeconds = Math.min(...node.jobs.map(job => Number(job.start_seconds || 0)));
+    node.endSeconds = Math.max(...node.jobs.map(job => Number(job.end_seconds || 0)));
+  });
+  const edgeMap = new Map();
+  const addEdge = (source, target, critical) => {
+    if (!source || !target || source === target) return;
+    const key = `${source}→${target}`;
+    const existing = edgeMap.get(key);
+    if (existing) {
+      existing.critical ||= critical;
+      existing.count += 1;
+    } else {
+      edgeMap.set(key, {source, target, critical, count:1});
+    }
+  };
+  plan.jobs.forEach(job => {
+    const target = groupByJob.get(job.job_id);
+    job.dependencies.forEach(source => addEdge(groupByJob.get(source), target, Boolean(job.is_critical && jobById.get(source)?.is_critical)));
+    Object.keys(job.ingredients || {}).filter(key => rawKeys.has(key)).forEach(key => addEdge(`raw:${key}`, target, Boolean(job.is_critical)));
+  });
+  graph.edges = [...edgeMap.values()];
   const stages = new Map();
   [...graph.nodes.values()].forEach(node => { if (!stages.has(node.stage)) stages.set(node.stage, []); stages.get(node.stage).push(node); });
   [...stages].sort((a,b) => a[0]-b[0]).forEach(([stage, nodes]) => {
@@ -221,11 +253,12 @@ function drawGraph() {
     const group = svgElement("g", {class:`graph-node ${node.kind}${node.critical ? " critical" : ""}`, "data-id":node.id, transform:`translate(${node.x} ${node.y})`, tabindex:"0"});
     group.append(svgElement("rect", {x:0,y:0,width:210,height:78,rx:9,class:"node-card"}));
     group.append(svgElement("rect", {x:0,y:0,width:5,height:78,rx:3,class:"node-accent"}));
-    const title = svgElement("text", {x:16,y:22,class:"node-title"}); title.textContent = node.name.length > 25 ? `${node.name.slice(0,24)}…` : node.name; group.append(title);
+    const nodeLabel = node.kind === "job" && node.count > 1 ? `${node.name} ×${node.count}` : node.name;
+    const title = svgElement("text", {x:16,y:22,class:"node-title"}); title.textContent = nodeLabel.length > 25 ? `${nodeLabel.slice(0,24)}…` : nodeLabel; group.append(title);
     const meta = svgElement("text", {x:16,y:42,class:"node-meta"});
-    meta.textContent = node.kind === "raw" ? `Input · ${node.quantity} ${node.unit}` : `${node.data.station_name} · unit cost ${node.data.average_value ?? "—"}`; group.append(meta);
+    meta.textContent = node.kind === "raw" ? `Input · ${node.quantity} ${node.unit}` : node.count > 1 ? `${node.count} runs · ${node.data.station_name} · cost ${node.data.average_value ?? "—"}` : `${node.data.station_name} · unit cost ${node.data.average_value ?? "—"}`; group.append(meta);
     const time = svgElement("text", {x:16,y:61,class:"node-time"});
-    time.textContent = node.kind === "raw" ? `Extended cost ${node.data.extended_cost ?? "—"}` : `${duration(node.data.duration_seconds)} · completes ${duration(node.data.end_seconds)}`; group.append(time);
+    time.textContent = node.kind === "raw" ? `Extended cost ${node.data.extended_cost ?? "—"}` : node.count > 1 ? `${duration(node.data.duration_seconds)} each · finish ${duration(node.endSeconds)}` : `${duration(node.data.duration_seconds)} · completes ${duration(node.data.end_seconds)}`; group.append(time);
     group.addEventListener("pointerdown", startNodeDrag);
     group.addEventListener("click", event => { event.stopPropagation(); showNodeDetails(node); });
     nodeLayer.append(group);
@@ -247,7 +280,7 @@ function showNodeDetails(node) {
   const element = $("#node-details");
   const data = node.data;
   element.hidden = false;
-  element.innerHTML = node.kind === "raw" ? `<h3>${escapeHtml(node.name)}</h3><dl><dt>Required</dt><dd>${escapeHtml(data.quantity)} ${escapeHtml(data.unit)}</dd><dt>Average cost</dt><dd>${escapeHtml(data.average_value ?? "—")}</dd><dt>Extended cost</dt><dd>${escapeHtml(data.extended_cost ?? "—")}</dd></dl>` : `<h3>${escapeHtml(node.name)}</h3><dl><dt>Station</dt><dd>${escapeHtml(data.station_name)}</dd><dt>Run time</dt><dd>${duration(data.duration_seconds)}</dd><dt>Mastered</dt><dd>${data.mastered_duration_seconds == null ? "—" : duration(data.mastered_duration_seconds)}</dd><dt>Unlock level</dt><dd>${data.unlock_level ?? "—"}</dd><dt>Starts</dt><dd>${duration(data.start_seconds)}</dd><dt>Completes</dt><dd>${duration(data.end_seconds)}</dd><dt>Batch output</dt><dd>${escapeHtml(data.output_quantity)}</dd><dt>Critical</dt><dd>${data.is_critical ? "Yes" : "No"}</dd></dl>`;
+  element.innerHTML = node.kind === "raw" ? `<h3>${escapeHtml(node.name)}</h3><dl><dt>Required</dt><dd>${escapeHtml(data.quantity)} ${escapeHtml(data.unit)}</dd><dt>Average cost</dt><dd>${escapeHtml(data.average_value ?? "—")}</dd><dt>Extended cost</dt><dd>${escapeHtml(data.extended_cost ?? "—")}</dd></dl>` : `<h3>${escapeHtml(node.name)}${node.count > 1 ? ` ×${node.count}` : ""}</h3><dl><dt>Runs</dt><dd>${node.count}</dd><dt>Station</dt><dd>${escapeHtml(data.station_name)}</dd><dt>Run time</dt><dd>${duration(data.duration_seconds)}</dd><dt>Mastered</dt><dd>${data.mastered_duration_seconds == null ? "—" : duration(data.mastered_duration_seconds)}</dd><dt>Unlock level</dt><dd>${data.unlock_level ?? "—"}</dd><dt>First start</dt><dd>${duration(node.startSeconds)}</dd><dt>Final completion</dt><dd>${duration(node.endSeconds)}</dd><dt>Batch output</dt><dd>${escapeHtml(data.output_quantity)}</dd><dt>Critical runs</dt><dd>${node.criticalCount}</dd></dl>`;
 }
 
 function canvasPoint(event) {
@@ -291,8 +324,10 @@ function bindEvents() {
   $("#json-file").addEventListener("change", event => loadPlanFile(event.target.files[0]));
   $("#xlsx-file").addEventListener("change", event => convertWorkbook(event.target.files[0]));
   const graph = $("#graph");
+  graph.addEventListener("selectstart", event => event.preventDefault());
   graph.addEventListener("pointerdown", event => {
     if (event.target.closest(".graph-node")) return;
+    event.preventDefault();
     state.graph.panning = {x:event.clientX, y:event.clientY, tx:state.graph.tx, ty:state.graph.ty};
     graph.classList.add("panning"); graph.setPointerCapture(event.pointerId);
     $("#node-details").hidden = true;
@@ -315,6 +350,14 @@ function bindEvents() {
     const old = state.graph.scale, next = Math.min(2.5, Math.max(.2, old * Math.exp(-event.deltaY*.001)));
     state.graph.tx = px-(px-state.graph.tx)*(next/old); state.graph.ty = py-(py-state.graph.ty)*(next/old); state.graph.scale = next; applyViewport();
   }, {passive:false});
+  document.addEventListener("keydown", event => {
+    const target = event.target;
+    const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
+    if (!typing && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      fitGraph();
+    }
+  });
 }
 
 async function uploadDatabase(file) {
