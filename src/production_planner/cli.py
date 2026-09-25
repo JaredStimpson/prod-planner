@@ -145,12 +145,11 @@ def serve(
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(8000, "--port", min=1, max=65535),
 ):
-    if (database is None) == (saved_plan is None):
-        raise typer.BadParameter("choose exactly one of --database or --plan")
+    if database is not None and saved_plan is not None:
+        raise typer.BadParameter("choose at most one of --database or --plan")
     import uvicorn
     uvicorn.run(create_app(database, saved_plan), host=host, port=port)
 
 
 if __name__ == "__main__":
     app()
-

@@ -8,11 +8,16 @@ from typing import Iterator
 
 from .errors import ValidationError
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
 CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE categories (
+  category_key TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT
+);
 CREATE TABLE items (
   item_key TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -20,12 +25,16 @@ CREATE TABLE items (
   unit TEXT NOT NULL DEFAULT 'unit',
   average_value TEXT,
   value_basis TEXT,
-  notes TEXT
+  notes TEXT,
+  category_key TEXT REFERENCES categories(category_key),
+  unlock_level INTEGER,
+  source_url TEXT
 );
 CREATE TABLE stations (
   station_key TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  notes TEXT
+  notes TEXT,
+  station_type TEXT
 );
 CREATE TABLE recipes (
   recipe_key TEXT PRIMARY KEY,
@@ -35,7 +44,9 @@ CREATE TABLE recipes (
   station_key TEXT NOT NULL REFERENCES stations(station_key),
   duration_seconds INTEGER NOT NULL CHECK(duration_seconds >= 0),
   is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
-  notes TEXT
+  notes TEXT,
+  mastered_duration_seconds INTEGER CHECK(mastered_duration_seconds IS NULL OR mastered_duration_seconds >= 0),
+  unlock_level INTEGER
 );
 CREATE UNIQUE INDEX one_active_recipe_per_item
 ON recipes(output_item_key) WHERE is_active = 1;
@@ -43,6 +54,7 @@ CREATE TABLE ingredients (
   recipe_key TEXT NOT NULL REFERENCES recipes(recipe_key) ON DELETE CASCADE,
   item_key TEXT NOT NULL REFERENCES items(item_key),
   quantity TEXT NOT NULL,
+  component_sequence INTEGER,
   PRIMARY KEY(recipe_key, item_key)
 );
 CREATE TABLE capacity_profiles (
@@ -74,19 +86,24 @@ def create_database(path: Path, rows: dict[str, list[dict[str, object]]]) -> Non
             connection.executemany("INSERT INTO metadata(key,value) VALUES(:key,:value)", rows["metadata"])
             connection.execute("INSERT INTO metadata(key,value) VALUES('schema_version',?)", (SCHEMA_VERSION,))
             connection.executemany(
-                "INSERT INTO items(item_key,name,kind,unit,average_value,value_basis,notes) VALUES(:item_key,:name,:kind,:unit,:average_value,:value_basis,:notes)",
-                rows["items"],
+                "INSERT INTO categories(category_key,name,description) VALUES(:category_key,:name,:description)",
+                rows.get("categories", []),
             )
             connection.executemany(
-                "INSERT INTO stations(station_key,name,notes) VALUES(:station_key,:name,:notes)", rows["stations"]
+                "INSERT INTO items(item_key,name,kind,unit,average_value,value_basis,notes,category_key,unlock_level,source_url) VALUES(:item_key,:name,:kind,:unit,:average_value,:value_basis,:notes,:category_key,:unlock_level,:source_url)",
+                [dict(row, category_key=row.get("category_key"), unlock_level=row.get("unlock_level"), source_url=row.get("source_url")) for row in rows["items"]],
             )
             connection.executemany(
-                "INSERT INTO recipes(recipe_key,output_item_key,process_name,output_quantity,station_key,duration_seconds,is_active,notes) VALUES(:recipe_key,:output_item_key,:process_name,:output_quantity,:station_key,:duration_seconds,:is_active,:notes)",
-                rows["recipes"],
+                "INSERT INTO stations(station_key,name,notes,station_type) VALUES(:station_key,:name,:notes,:station_type)",
+                [dict(row, station_type=row.get("station_type")) for row in rows["stations"]],
             )
             connection.executemany(
-                "INSERT INTO ingredients(recipe_key,item_key,quantity) VALUES(:recipe_key,:item_key,:quantity)",
-                rows["ingredients"],
+                "INSERT INTO recipes(recipe_key,output_item_key,process_name,output_quantity,station_key,duration_seconds,is_active,notes,mastered_duration_seconds,unlock_level) VALUES(:recipe_key,:output_item_key,:process_name,:output_quantity,:station_key,:duration_seconds,:is_active,:notes,:mastered_duration_seconds,:unlock_level)",
+                [dict(row, mastered_duration_seconds=row.get("mastered_duration_seconds"), unlock_level=row.get("unlock_level")) for row in rows["recipes"]],
+            )
+            connection.executemany(
+                "INSERT INTO ingredients(recipe_key,item_key,quantity,component_sequence) VALUES(:recipe_key,:item_key,:quantity,:component_sequence)",
+                [dict(row, component_sequence=row.get("component_sequence")) for row in rows["ingredients"]],
             )
             connection.executemany(
                 "INSERT INTO capacity_profiles(profile_key,name) VALUES(:profile_key,:name)", rows["capacity_profiles"]
@@ -136,4 +153,3 @@ def database_fingerprint(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-

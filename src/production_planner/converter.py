@@ -23,6 +23,14 @@ SHEETS = {
     "Sources": ["source_key", "title", "url", "accessed_date", "notes"],
 }
 
+NORMALIZED_SHEETS = {
+    "items": ["item_id", "item_name", "category_id", "unlock_level", "source_url"],
+    "production_methods": ["production_method_id", "output_item_id", "station_id", "output_quantity", "base_time_minutes", "mastered_time_minutes", "unlock_level", "notes"],
+    "production_components": ["production_method_id", "component_item_id", "component_quantity", "component_sequence"],
+    "stations": ["station_id", "station_name", "station_type"],
+    "categories": ["category_id", "category_name", "description"],
+}
+
 
 def _clean(value: object) -> object | None:
     if value is None or (isinstance(value, float) and math.isnan(value)):
@@ -60,24 +68,86 @@ def read_workbook(path: Path) -> dict[str, list[dict[str, object]]]:
         workbook = load_workbook(path, read_only=True, data_only=True)
     except Exception as exc:
         raise ValidationError(f"could not read workbook: {exc}") from exc
-    missing = set(SHEETS) - set(workbook.sheetnames)
-    if missing:
-        raise ValidationError(f"missing sheets: {', '.join(sorted(missing))}")
-    rows = {key: _rows(workbook[key], headers) for key, headers in SHEETS.items()}
-    workbook.close()
-
-    result = {
-        "metadata": rows["Metadata"],
-        "items": rows["Items"],
-        "stations": rows["Stations"],
-        "recipes": rows["Recipes"],
-        "ingredients": rows["Ingredients"],
-        "capacity_profiles": rows["CapacityProfiles"],
-        "capacities": rows["Capacities"],
-        "sources": rows["Sources"],
-    }
+    try:
+        if set(NORMALIZED_SHEETS) <= set(workbook.sheetnames):
+            result = _read_normalized_workbook(workbook)
+        else:
+            missing = set(SHEETS) - set(workbook.sheetnames)
+            if missing:
+                raise ValidationError(f"missing sheets: {', '.join(sorted(missing))}")
+            rows = {key: _rows(workbook[key], headers) for key, headers in SHEETS.items()}
+            result = {
+                "metadata": rows["Metadata"],
+                "categories": [],
+                "items": rows["Items"],
+                "stations": rows["Stations"],
+                "recipes": rows["Recipes"],
+                "ingredients": rows["Ingredients"],
+                "capacity_profiles": rows["CapacityProfiles"],
+                "capacities": rows["Capacities"],
+                "sources": rows["Sources"],
+            }
+    finally:
+        workbook.close()
     _validate(result)
     return result
+
+
+def _read_normalized_workbook(workbook) -> dict[str, list[dict[str, object]]]:
+    rows = {name: _rows(workbook[name], headers) for name, headers in NORMALIZED_SHEETS.items()}
+    method_outputs = {str(row["output_item_id"]) for row in rows["production_methods"]}
+    station_names = {str(row["station_id"]): str(row["station_name"]) for row in rows["stations"]}
+
+    metadata: list[dict[str, object]] = [
+        {"key": "database_name", "value": "Hay Day production catalog"},
+        {"key": "source_format", "value": "normalized_hay_day_workbook"},
+    ]
+    if "schema" in workbook.sheetnames:
+        schema_values = list(workbook["schema"].iter_rows(values_only=True))
+        start = next((index for index, row in enumerate(schema_values) if row and row[0] == "metadata_key"), None)
+        if start is not None:
+            for row in schema_values[start + 1:]:
+                if not row or row[0] is None:
+                    break
+                metadata.append({"key": str(row[0]), "value": str(row[1])})
+
+    categories = [{
+        "category_key": row["category_id"], "name": row["category_name"], "description": row["description"],
+    } for row in rows["categories"]]
+    items = [{
+        "item_key": row["item_id"], "name": row["item_name"],
+        "kind": "producible" if str(row["item_id"]) in method_outputs else "raw",
+        "unit": "unit", "average_value": "1", "value_basis": "temporary v1.1 default",
+        "notes": None, "category_key": row["category_id"], "unlock_level": row["unlock_level"],
+        "source_url": row["source_url"],
+    } for row in rows["items"]]
+    stations = [{
+        "station_key": row["station_id"], "name": row["station_name"], "notes": None,
+        "station_type": row["station_type"],
+    } for row in rows["stations"]]
+    recipes = [{
+        "recipe_key": row["production_method_id"], "output_item_key": row["output_item_id"],
+        "process_name": station_names.get(str(row["station_id"]), str(row["station_id"])),
+        "output_quantity": row["output_quantity"], "station_key": row["station_id"],
+        "duration_seconds": int(row["base_time_minutes"] * 60), "is_active": 1, "notes": row["notes"],
+        "mastered_duration_seconds": None if row["mastered_time_minutes"] is None else int(row["mastered_time_minutes"] * 60),
+        "unlock_level": row["unlock_level"],
+    } for row in rows["production_methods"]]
+    ingredients = [{
+        "recipe_key": row["production_method_id"], "item_key": row["component_item_id"],
+        "quantity": row["component_quantity"], "component_sequence": row["component_sequence"],
+    } for row in rows["production_components"]]
+    return {
+        "metadata": metadata,
+        "categories": categories,
+        "items": items,
+        "stations": stations,
+        "recipes": recipes,
+        "ingredients": ingredients,
+        "capacity_profiles": [{"profile_key": "hay_day_default", "name": "Hay Day default"}],
+        "capacities": [{"profile_key": "hay_day_default", "station_key": row["station_id"], "station_count": 1} for row in rows["stations"]],
+        "sources": [],
+    }
 
 
 def _unique(rows: list[dict[str, object]], field: str, label: str) -> set[str]:
@@ -98,6 +168,7 @@ def _validate(rows: dict[str, list[dict[str, object]]]) -> None:
     if "schema_version" in metadata_keys:
         raise ValidationError("metadata key schema_version is reserved")
     item_keys = _unique(rows["items"], "item_key", "item")
+    category_keys = _unique(rows.get("categories", []), "category_key", "category")
     station_keys = _unique(rows["stations"], "station_key", "station")
     recipe_keys = _unique(rows["recipes"], "recipe_key", "recipe")
     profile_keys = _unique(rows["capacity_profiles"], "profile_key", "capacity profile")
@@ -111,6 +182,8 @@ def _validate(rows: dict[str, list[dict[str, object]]]) -> None:
         row["unit"] = row.get("unit") or "unit"
         if row.get("average_value") is not None:
             row["average_value"] = _decimal(row["average_value"], f"item {row['item_key']} average_value", positive=False)
+        if row.get("category_key") is not None and str(row["category_key"]) not in category_keys:
+            raise ValidationError(f"item {row['item_key']} references an unknown category")
     active_by_output: dict[str, int] = defaultdict(int)
     for row in rows["recipes"]:
         if str(row.get("output_item_key")) not in item_keys or str(row.get("station_key")) not in station_keys:

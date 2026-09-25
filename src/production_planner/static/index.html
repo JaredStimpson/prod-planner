@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Production Planner</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=1.1.0">
+</head>
+<body>
+  <main class="workspace">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">PRODUCTION PLANNER <span>1.1</span></div>
+        <h1 id="catalog-title">Plan the work. See the path.</h1>
+      </div>
+      <div class="top-actions">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Connecting…</span>
+        <button class="icon-button" id="fit-button" title="Fit diagram to view">Fit view</button>
+      </div>
+    </header>
+
+    <section class="canvas-shell" id="canvas-shell">
+      <svg id="graph" aria-label="Production dependency graph">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z"></path>
+          </marker>
+          <marker id="arrow-critical" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z"></path>
+          </marker>
+        </defs>
+        <g id="viewport"><g id="stage-layer"></g><g id="edge-layer"></g><g id="node-layer"></g></g>
+      </svg>
+      <div class="empty-state" id="empty-state">
+        <div class="empty-mark">↗</div>
+        <h2>Your production path will appear here</h2>
+        <p>Add an output in the right panel, set your station counts, then calculate.</p>
+      </div>
+      <aside class="node-details" id="node-details" hidden></aside>
+      <div class="legend">
+        <span><i class="legend-line critical"></i>Critical path</span>
+        <span><i class="legend-line"></i>Dependency</span>
+        <span>Wheel to zoom · drag canvas to pan · drag nodes to arrange</span>
+      </div>
+    </section>
+  </main>
+
+  <aside class="sidebar">
+    <nav class="tabs" aria-label="Planner controls">
+      <button class="tab active" data-tab="data">Data</button>
+      <button class="tab" data-tab="capacity">Capacity</button>
+      <button class="tab" data-tab="outputs">Outputs <span class="count" id="output-count">0</span></button>
+    </nav>
+
+    <section class="tab-panel active" id="tab-data">
+      <div class="panel-heading">
+        <p class="eyebrow">SOURCE</p>
+        <h2>Load or save</h2>
+        <p>Switch catalogs without restarting, open a saved plan, or keep the current result as JSON.</p>
+      </div>
+      <div class="action-grid">
+        <button class="primary" id="load-db-button">Load database</button>
+        <button id="load-json-button">Load plan JSON</button>
+        <button id="convert-button">Convert Excel → DB</button>
+        <button id="save-button" disabled>Save current plan</button>
+      </div>
+      <input type="file" id="db-file" accept=".sqlite,.sqlite3,.db" hidden>
+      <input type="file" id="json-file" accept=".json,application/json" hidden>
+      <input type="file" id="xlsx-file" accept=".xlsx" hidden>
+      <div class="source-card" id="source-card">
+        <span class="source-icon">DB</span>
+        <div><strong>No catalog loaded</strong><small>Load a planner SQLite database to begin.</small></div>
+      </div>
+      <div class="analysis-note">
+        <strong>Workbook mapping</strong>
+        <p>Normalized items, categories, stations, methods, components, source URLs, unlock levels, batch sizes, and both timing fields are retained. Cost defaults to 1.</p>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-capacity">
+      <div class="panel-heading">
+        <p class="eyebrow">RESOURCES</p>
+        <h2>Station counts</h2>
+        <p>Set how many copies of each station can run at once.</p>
+      </div>
+      <label class="field-label" for="station-search">Find a station</label>
+      <input class="search" id="station-search" placeholder="Search stations…">
+      <div class="station-list" id="station-list"></div>
+    </section>
+
+    <section class="tab-panel" id="tab-outputs">
+      <div class="panel-heading">
+        <p class="eyebrow">TARGETS</p>
+        <h2>Choose outputs</h2>
+        <p>Search the catalog and add everything this production run must deliver.</p>
+      </div>
+      <label class="field-label" for="item-search">Find an item</label>
+      <input class="search" id="item-search" placeholder="Try “apple pie”…" autocomplete="off">
+      <div class="search-results" id="search-results"></div>
+      <div class="selection-heading"><span>Selected outputs</span><button class="text-button" id="clear-button">Clear</button></div>
+      <div class="selected-list" id="selected-list"></div>
+      <button class="calculate" id="calculate-button" disabled>Calculate production plan <span>→</span></button>
+      <section class="plan-results" id="plan-results" hidden></section>
+    </section>
+  </aside>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="/assets/app.js?v=1.1.1" defer></script>
+</body>
+</html>

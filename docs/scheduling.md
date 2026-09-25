@@ -13,5 +13,6 @@ The scheduler advances through completion events. Whenever a station instance is
 
 This is work-conserving: ready lower-priority work can start while higher-priority work is blocked. The result is deterministic but is not represented as a globally optimal makespan.
 
-Raw items are available at time zero and appear in procurement BOM output. Inventory-on-hand, partial/preemptive recipe runs, alternate-recipe optimization, and station setup/changeover times are outside v0.1.
+Plan jobs include their ingredient map and an `is_critical` flag. The displayed critical path follows zero-slack prerequisite and same-station execution links backward from the makespan. The GUI uses those flags for red nodes and edges; it lays dependencies into left-to-right stages independently of schedule time.
 
+Raw items are available at time zero and appear in procurement BOM output. Inventory-on-hand, partial/preemptive recipe runs, alternate-recipe optimization, and station setup/changeover times are outside v0.1.

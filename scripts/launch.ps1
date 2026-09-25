@@ -9,9 +9,9 @@ $planner = Join-Path $root ".venv\Scripts\planner.exe"
 if (-not (Test-Path -LiteralPath $planner)) {
     throw "Run scripts\setup.ps1 first."
 }
-if (($Database -and $Plan) -or (-not $Database -and -not $Plan)) {
-    throw "Provide exactly one of -Database or -Plan."
+if ($Database -and $Plan) {
+    throw "Provide at most one of -Database or -Plan."
 }
 if ($Database) { & $planner serve --database $Database --port $Port }
-else { & $planner serve --plan $Plan --port $Port }
-
+elseif ($Plan) { & $planner serve --plan $Plan --port $Port }
+else { & $planner serve --database (Join-Path $root "sampledata\hay_day.sqlite") --port $Port }

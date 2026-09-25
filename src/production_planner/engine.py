@@ -25,6 +25,10 @@ def _ceil(value: Decimal) -> int:
     return int(value.to_integral_value(rounding="ROUND_CEILING"))
 
 
+def _optional(row, key: str, default=None):
+    return row[key] if key in row.keys() else default
+
+
 @dataclass
 class Item:
     key: str
@@ -33,6 +37,9 @@ class Item:
     unit: str
     average_value: Decimal | None
     value_basis: str | None
+    category: str | None = None
+    unlock_level: int | None = None
+    source_url: str | None = None
 
 
 @dataclass
@@ -44,6 +51,8 @@ class Recipe:
     station: str
     duration: int
     ingredients: dict[str, Decimal]
+    mastered_duration: int | None = None
+    unlock_level: int | None = None
 
 
 @dataclass
@@ -79,7 +88,8 @@ class Catalog:
                 row["item_key"]: Item(
                     row["item_key"], row["name"], row["kind"], row["unit"],
                     Decimal(row["average_value"]) if row["average_value"] is not None else None,
-                    row["value_basis"],
+                    row["value_basis"], _optional(row, "category_key"),
+                    _optional(row, "unlock_level"), _optional(row, "source_url"),
                 )
                 for row in connection.execute("SELECT * FROM items ORDER BY name")
             }
@@ -91,9 +101,17 @@ class Catalog:
                 self.recipes[row["output_item_key"]] = Recipe(
                     row["recipe_key"], row["output_item_key"], row["process_name"],
                     Decimal(row["output_quantity"]), row["station_key"], row["duration_seconds"],
-                    ingredient_rows[row["recipe_key"]],
+                    ingredient_rows[row["recipe_key"]], _optional(row, "mastered_duration_seconds"),
+                    _optional(row, "unlock_level"),
                 )
             self.stations = {row["station_key"]: row["name"] for row in connection.execute("SELECT * FROM stations")}
+            self.station_types = {
+                row["station_key"]: _optional(row, "station_type") for row in connection.execute("SELECT * FROM stations")
+            }
+            self.categories = {
+                row["category_key"]: {"name": row["name"], "description": row["description"]}
+                for row in connection.execute("SELECT * FROM categories")
+            } if "categories" in {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")} else {}
             self.profiles = {
                 row["profile_key"]: row["name"] for row in connection.execute("SELECT * FROM capacity_profiles")
             }
@@ -113,6 +131,9 @@ class Catalog:
             result.append({
                 "item_key": item.key, "name": item.name, "kind": item.kind, "unit": item.unit,
                 "average_value": _text(item.average_value), "value_basis": item.value_basis,
+                "category_key": item.category,
+                "category_name": self.categories.get(item.category, {}).get("name") if item.category else None,
+                "unlock_level": item.unlock_level, "source_url": item.source_url,
             })
         return result
 
@@ -203,11 +224,15 @@ class Planner:
                 "station_key": recipe.station,
                 "station_name": self.catalog.stations[recipe.station],
                 "duration_per_run_seconds": recipe.duration,
+                "mastered_duration_per_run_seconds": recipe.mastered_duration,
+                "unlock_level": item.unlock_level,
+                "category_key": item.category,
                 "average_value": _text(item.average_value),
                 "value_basis": item.value_basis,
             }
 
         schedule = self._schedule(jobs, capacities)
+        critical_jobs = self._critical_jobs(jobs)
         warnings: list[str] = []
         rolled_cache: dict[str, Decimal | None] = {}
         for item_key, row in production.items():
@@ -262,6 +287,14 @@ class Planner:
             "priority": job.priority, "request_order": job.request_order,
             "start_seconds": job.start, "end_seconds": job.end, "duration_seconds": job.duration,
             "output_quantity": _text(job.output_quantity), "dependencies": sorted(job.dependencies),
+            "ingredients": {key: _text(value) for key, value in self.catalog.recipes[job.item_key].ingredients.items()},
+            "average_value": _text(self.catalog.items[job.item_key].average_value),
+            "value_basis": self.catalog.items[job.item_key].value_basis,
+            "mastered_duration_seconds": self.catalog.recipes[job.item_key].mastered_duration,
+            "unlock_level": self.catalog.items[job.item_key].unlock_level,
+            "category_key": self.catalog.items[job.item_key].category,
+            "source_url": self.catalog.items[job.item_key].source_url,
+            "is_critical": job.job_id in critical_jobs,
         } for job in sorted(jobs.values(), key=lambda value: (value.start or 0, value.station_key, value.job_id))]
 
         source = {
@@ -286,6 +319,30 @@ class Planner:
             actual_input_cost=_text(actual_cost),
             warnings=sorted(set(warnings)),
         )
+
+    def _critical_jobs(self, jobs: dict[str, Job]) -> set[str]:
+        if not jobs:
+            return set()
+        predecessors = {job_id: set(job.dependencies) for job_id, job in jobs.items()}
+        by_machine: dict[tuple[str, int | None], list[Job]] = defaultdict(list)
+        for job in jobs.values():
+            by_machine[(job.station_key, job.station_instance)].append(job)
+        for machine_jobs in by_machine.values():
+            ordered = sorted(machine_jobs, key=lambda job: (job.start or 0, job.job_id))
+            for previous, current in zip(ordered, ordered[1:]):
+                if previous.end == current.start:
+                    predecessors[current.job_id].add(previous.job_id)
+        makespan = max(job.end or 0 for job in jobs.values())
+        critical: set[str] = set()
+        stack = [job.job_id for job in jobs.values() if job.end == makespan]
+        while stack:
+            job_id = stack.pop()
+            if job_id in critical:
+                continue
+            critical.add(job_id)
+            start = jobs[job_id].start
+            stack.extend(parent for parent in predecessors[job_id] if jobs[parent].end == start)
+        return critical
 
     def _reachable_order(self, roots: list[str]) -> tuple[set[str], list[str]]:
         reachable: set[str] = set()
@@ -411,4 +468,3 @@ def load_plan(path: Path) -> PlanDocument:
         if isinstance(exc, ValidationError):
             raise
         raise ValidationError(f"invalid saved plan: {exc}") from exc
-

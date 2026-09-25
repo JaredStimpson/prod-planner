@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "production-planner"
-version = "0.1.0"
+version = "1.1.0"
 description = "Portable recipe database, BOM calculator, and finite-capacity production scheduler"
 requires-python = ">=3.12"
 dependencies = [
@@ -26,7 +26,9 @@ planner = "production_planner.cli:app"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+production_planner = ["static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-

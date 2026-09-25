@@ -24,6 +24,8 @@ def test_pools_intermediate_and_schedules_dependencies(catalog_path):
         job for job in downstream if job["item_key"] == "gadget"
     )["start_seconds"]
     assert result.actual_input_cost == "6"
+    assert any(job["is_critical"] for job in result.jobs)
+    assert all("ingredients" in job for job in result.jobs)
 
 
 def test_multiple_station_override_reduces_finish_time(catalog_path):
@@ -45,4 +47,3 @@ def test_plan_round_trip_without_database(catalog_path, tmp_path):
     loaded = load_plan(path)
     assert loaded.source_database["sha256"]
     assert loaded.outputs == result.outputs
-
